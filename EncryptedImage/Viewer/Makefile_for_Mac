@@ -1,0 +1,5 @@
+CFLAGS = `pkg-config --cflags opencv4`
+LIBS = `pkg-config --libs opencv4`
+
+Viewr.out: main.cpp ../Src/common.h ../Src/ImageViewer.h ../Src/ImageLoader.h
+	g++ -std=c++11 $(CFLAGS) -o Viewr.out main.cpp ../Src/ImageLoader.cpp ../Src/ImageViewer.cpp $(LIBS)

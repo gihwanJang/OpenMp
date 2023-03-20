@@ -39,6 +39,7 @@
 ```
 복원 이미지 확인
     - window : Utility Programs 내의 Vierwer.exe [데이터파일][너비][높이][저장할 파일]
-    - linux, mac : ./OpenMP/EncryptedImage/Viewer/Viewer.out 사용
+    - mac : ./OpenMP/EncryptedImage/Viewer/Viewer_for_Mac.out 사용
+    - linux: ./OpenMP/EncryptedImage/Viewer/Viewer.out 사용
         - ./Viewr.out ../Lab1-2/out.data 7680 4320 out.png
 ```
