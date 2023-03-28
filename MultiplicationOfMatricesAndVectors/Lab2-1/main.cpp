@@ -62,7 +62,7 @@ int main(int argc, char** argv)
 
 	//** HERE
 	//** Write your code implementing the parallel algorithm here
-	#pragma omp parallel
+	#pragma omp parallel num_threads(16)
 	{
 		#pragma omp for
 		for(int r = 0; r < m; ++r)

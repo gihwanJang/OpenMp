@@ -32,7 +32,7 @@ int main(int argc, char const *argv[]){
     // timer
     DS_timer timer(2);
     timer.setTimerName(0, (char*)"Serial");
-	timer.setTimerName(1, (char*)"Parallel");
+    timer.setTimerName(1, (char*)"Parallel");
 
     // Serial algorithm
     timer.onTimer(0);
