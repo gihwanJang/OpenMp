@@ -36,7 +36,7 @@
 
 #define	_STRTOK strtok_r
 
-#define EXIT_WIHT_KEYPRESS {std::cout << "Program was terminated!"; exit(0);}
+#define EXIT_WIHT_KEYPRESS {std::cout << "Program was terminated!\n"; exit(0);}
 
 #define sprintf_s	sprintf
 #define scanf_s		scanf
