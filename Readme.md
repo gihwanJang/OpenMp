@@ -5,7 +5,7 @@
 ### 개발 환경
 
 - OS : Ubuntu
-    - Version : 18.0.4
+    - Version : 18.04
 - IDE : vscode 
     - Version: 1.76.1
 - Compiler : GCC
