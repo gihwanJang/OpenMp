@@ -1,91 +1,108 @@
-#include <limits>
-#include <ctime> 
 #include <iostream>
+#include <fstream>
+#include <cstdlib>
 #include <vector>
-
-#include "matplotlibcpp.h"
-
-namespace plt = matplotlibcpp;
+#include <limits>
+#include <ctime>
+#include <cmath>
 
 struct Point {
-    double x, y;
+    int x, y;
     int cluster;
-    double minDistance;
+    int minDistance;
 
-    Point() :
-        x(0.0),
-        y(0.0),
-        cluster(-1),
-        minDistance(std::numeric_limits<double>::max()) {}
+    Point() :x(0),y(0),cluster(-1), minDistance(std::numeric_limits<int>::max()){}
 
     double distance(Point p) {
         return (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y);
     }
 };
 
-Point data[100000];
-Point centroids[5];
+void dataGenerate(std::vector<Point>&data, int size, int centroid) {
+    srand(time(NULL));
+    Point center;
+    int total = 0, x_rand, y_rand;
 
-unsigned short pseudo_rand() {
-    static unsigned long long seed = 5;
-    return (seed = seed * 25214903917ULL + 11ULL) >> 16;
-}
+    while(centroid--){
+        int cluster_size = centroid == 0 ? size : rand() % size;
 
-void build() {
-    int alpha = pseudo_rand();
-    int beta = pseudo_rand();
+        center.x = rand() % 100000;
+        center.y = rand() % 100000;
 
-    int loop = 0;
-    while (loop < 100000) {
-        int tmp = 0;
-        for (int i = 0; i < 3; i++) tmp += pseudo_rand() % 100;
+        for(int i = 0; i < cluster_size; ++i){
+            x_rand = rand() % 5000+1;
+            y_rand = rand() % 5000+1;
+            data[total+i].x = center.x + (rand() % x_rand) * (x_rand%2 == 0 ? 1 : -1);
+            data[total+i].y = center.y + (rand() % y_rand) * (y_rand%2 == 0 ? 1 : -1);
+        }
 
-        data[loop].x = (double)((tmp / 3 + alpha) % 100) + (pseudo_rand() % 1000000) / 1000000.;
-        data[loop].y = (double)((tmp / 3 + beta) % 100) + (pseudo_rand() % 1000000) / 1000000.;
-        loop++;
+        size -= cluster_size;
+        total += cluster_size;
     }
 }
 
-void kMeansClustering(int epoch) {
-    /* Init cluster */
-    for (int i = 0; i < 5; i++)
-        centroids[i] = data[pseudo_rand() % 100000];
+void kMeansClustering(std::vector<Point>&data, int k) {
+    std::vector<Point> centroids(k);
+    std::vector<Point> prev(k);
 
-    while (epoch--) {
-        /* Assign Points to a cluster */
-        for (int i = 0; i < 5; i++) {
-            for (register int idx = 0; idx < 100000; idx++) {
-                double dist = centroids[i].distance(data[idx]);
+    int loop = 100000;
+
+    for (int i = 0; i < k; ++i)
+        centroids[i] = data[rand() % data.size()];
+
+    while(loop--) {
+        for(int i = 0; i < k; ++i){
+            prev[i].x = centroids[i].x;
+            prev[i].y = centroids[i].y;
+        }
+
+        for (int i = 0; i < k; ++i)
+            for (int idx = 0; idx < data.size(); ++idx) {
+                int dist = centroids[i].distance(data[idx]);
                 if (dist < data[idx].minDistance) {
                     data[idx].minDistance = dist;
                     data[idx].cluster = i;
                 }
             }
-        }
 
-        /* Computing new centroids */
-        int point_cnt[5] = { 0, };
-        double sum_x[5] = { 0, };
-        double sum_y[5] = { 0, };
+        int point_cnt[k] = { 0, };
+        int sum_x[k] = { 0, };
+        int sum_y[k] = { 0, };
 
-        for (register int i = 0; i < 100000; i++) {
+        for (int i = 0; i < data.size(); ++i) {
             int cluster_id = data[i].cluster;
             point_cnt[cluster_id] += 1;
             sum_x[cluster_id] += data[i].x;
             sum_y[cluster_id] += data[i].y;
 
-            data[i].minDistance = std::numeric_limits<double>::max();
+            data[i].minDistance = std::numeric_limits<int>::max();
         }
 
-        for (int i = 0; i < 5; i++) {
-            centroids[i].x = sum_x[i] / point_cnt[i];
-            centroids[i].y = sum_y[i] / point_cnt[i];
-        }
+        for (int i = 0; i < k; ++i) 
+            if(point_cnt[i]){
+                centroids[i].x = sum_x[i] / point_cnt[i];
+                centroids[i].y = sum_y[i] / point_cnt[i];
+            }
     }
 }
 
 int main(int argc, char const *argv[]){
-	plt::plot({1,2,3,4}, "*");
-	plt::show();
+    int dataSize = 200;
+    int k = 3;
+
+    std::cout<< "start generate" << "\n";
+    std::vector<Point> data(dataSize);
+	dataGenerate(data, dataSize, 3);
+    std::cout<< "end generate" << "\n";
+    kMeansClustering(data,k);
+
+    std::ofstream myfile;
+    myfile.open("k-means_output.csv");
+    myfile << "x,y,c" << "\n";
+
+    for (int i = 0; i < dataSize; ++i) {
+        myfile << data[i].x << "," << data[i].y << "," << data[i].cluster << "\n";
+    }
+    myfile.close();
 	return 0;
 }
