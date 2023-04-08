@@ -80,8 +80,10 @@ void kMeansClustering(std::vector<Point>&data, int k) {
 
         for (int i = 0; i < k; ++i) 
             if(point_cnt[i]){
-                centroids[i].x = sum_x[i] / point_cnt[i];
-                centroids[i].y = sum_y[i] / point_cnt[i];
+                if(sum_x[i] > 0)
+                    centroids[i].x = sum_x[i] / point_cnt[i];
+                if(sum_y[i] > 0)
+                    centroids[i].y = sum_y[i] / point_cnt[i];
             }
     }
 }
