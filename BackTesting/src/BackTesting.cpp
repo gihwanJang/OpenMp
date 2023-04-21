@@ -41,7 +41,7 @@ int main(int argc, char *argv[]){
     std::string url = "https://api.bithumb.com/public/candlestick/btc_krw/24h";
     std::string response = send_http_request(url);
     nlohmann::json j = nlohmann::json::parse(response);
-    DS_timer timer(4, 1);
+    DS_timer timer(2, 1);
 
     timer.setTimerName(0, (char*)"Serial Algorithm");
     timer.setTimerName(1, (char*)"Parallel Algorithm");
@@ -348,7 +348,7 @@ double backtesting_parallel(nlohmann::json&j, std::unordered_map<long,int>&histo
 double* getClose_parallel(nlohmann::json&j){
     double* close = new double[j["data"].size()];
 
-    #pragma omp parallel for
+    #pragma omp parallel for num_threads(numThreads)
     for(size_t i = 0; i < j["data"].size(); ++i){
         std::stringstream ssDouble((std::string)j["data"][i][4]);
         ssDouble >> close[i];
