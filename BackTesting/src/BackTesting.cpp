@@ -6,6 +6,7 @@
 #include <vector>
 #include <ctime>
 #include <cmath>
+#include <omp.h>
 
 #include "nlohmann/json.hpp"
 #include "curl/curl.h"
@@ -18,38 +19,41 @@ static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdat
 std::string send_http_request(const std::string &url);
 char *conversionTimestamp(long timestamp);
 void viewData(nlohmann::json&j);
+void makeFile(nlohmann::json&j, std::unordered_map<long,int>&history, int n, std::string const title);
 // serial
-void serialAlgorithm(nlohmann::json&j);
+void serialAlgorithm(nlohmann::json&j, double*close);
 std::vector<double> calculateRSI(double*close, int n, int period);
 std::vector<double> calculateBollingerBands(double*close, int n, int period, int k);
-double backtesting(nlohmann::json&j, std::unordered_map<long,int>&history, int p1, int p2, int p3);
+double backtesting(nlohmann::json&j, std::unordered_map<long,int>&history, std::vector<double> rsi_values, int p1, int p2, int p3, double*close);
 double* getClose(nlohmann::json&j);
-void makeFile(nlohmann::json&j, std::unordered_map<long,int>&history, int n);
 //parallel
-void parallelAlgorithm(nlohmann::json&j);
+void parallelAlgorithm(nlohmann::json&j, double*close);
 std::vector<double> calculateRSI_parallel(double*close, int n, int period);
 std::vector<double> calculateBollingerBands_parallel(double*close, int n, int period, int k);
-double backtesting_parallel(nlohmann::json&j, std::unordered_map<long,int>&history, int p1, int p2, int p3);
+double backtesting_parallel(nlohmann::json&j, std::unordered_map<long,int>&history, std::vector<double> rsi_values, int p1, int p2, int p3, double*close);
 double* getClose_parallel(nlohmann::json&j);
-void makeFile_parallel(nlohmann::json&j, std::unordered_map<long,int>&history, int n);
 
 int main(int argc, char *argv[]){
+    omp_set_nested(1);
     get_numTreads(argc, argv);
 
+    double* close;
     std::string url = "https://api.bithumb.com/public/candlestick/btc_krw/24h";
     std::string response = send_http_request(url);
     nlohmann::json j = nlohmann::json::parse(response);
     DS_timer timer(4, 1);
 
     timer.setTimerName(0, (char*)"Serial Algorithm");
-   timer.setTimerName(1, (char*)"Parallel Algorithm");
+    timer.setTimerName(1, (char*)"Parallel Algorithm");
 
     timer.onTimer(0);
-    serialAlgorithm(j);
+    close = getClose(j);
+    serialAlgorithm(j, close);
     timer.offTimer(0);
 
     timer.onTimer(1);
-    parallelAlgorithm(j);
+    close = getClose_parallel(j);
+    parallelAlgorithm(j, close);
     timer.offTimer(1);
 
     timer.printTimer();
@@ -109,6 +113,21 @@ void viewData(nlohmann::json&j){
     }
 }
 
+void makeFile(nlohmann::json&j, std::unordered_map<long,int>&history, int n, std::string const title){
+    std::ofstream myfile;
+    
+    std::string subtitle = title;
+    subtitle.append(std::to_string(n));
+    subtitle.append(".csv");
+    myfile.open(subtitle);
+    myfile << "timestamp,open,high,low,close,action" << "\n";
+
+    for (size_t i = 0; i < j["data"].size(); ++i) {
+        myfile << j["data"][i][0] << "," << j["data"][i][1] << "," << j["data"][i][2] << "," << j["data"][i][3] << "," << j["data"][i][4] << "," << (history.count(j["data"][i][0]) ? history.at(j["data"][i][0]) : 0) << "\n";
+    }
+    myfile.close();
+}
+
 std::vector<double> calculateRSI(double*close, int n, int period){
     std::vector<double> RSI_values(n - period + 1, 0);
     for (int index = 0; index <= n - period; ++index) {
@@ -151,15 +170,12 @@ std::vector<double> calculateBollingerBands(double*close, int n, int period, int
     return BB_position_values;
 }
 
-double backtesting(nlohmann::json&j, std::unordered_map<long,int>&history, int p1, int p2, int p3) {
+double backtesting(nlohmann::json&j, std::unordered_map<long,int>&history, std::vector<double> rsi_values, int p1, int p2, int p3, double*close) {
     int maxParam = std::max(std::max(p1, p2), p3);
     
     double rateOfReturn = 0.0;
     double entryPrice = 0.0;
-
-    double* close = getClose(j);
     
-    std::vector<double> rsi_values = calculateRSI(close, j["data"].size(), p1);
     std::vector<double> bb_values = calculateBollingerBands(close, j["data"].size(), p2, p3);
 
     for (size_t i = maxParam; i < j["data"].size(); i++) {
@@ -190,7 +206,7 @@ double backtesting(nlohmann::json&j, std::unordered_map<long,int>&history, int p
 double* getClose(nlohmann::json&j){
     double* close = new double[j["data"].size()];
 
-    for(int i = 0; i < j["data"].size(); ++i){
+    for(size_t i = 0; i < j["data"].size(); ++i){
         std::stringstream ssDouble((std::string)j["data"][i][4]);
         ssDouble >> close[i];
     }
@@ -198,69 +214,53 @@ double* getClose(nlohmann::json&j){
     return close;
 }
 
-void makeFile(nlohmann::json&j, std::unordered_map<long,int>&history, int n){
-    std::ofstream myfile;
-    std::string title = "./out/serialTest";
-    
-    title.append(std::to_string(n));
-    title.append(".csv");
-    myfile.open(title);
-    myfile << "timestamp,open,high,low,close,action" << "\n";
-
-    for (int i = 0; i < j["data"].size(); ++i) {
-        myfile << j["data"][i][0] << "," << j["data"][i][1] << "," << j["data"][i][2] << "," << j["data"][i][3] << "," << j["data"][i][4] << "," << (history.count(j["data"][i][0]) ? history.at(j["data"][i][0]) : 0) << "\n";
-    }
-    myfile.close();
-}
-
-void serialAlgorithm(nlohmann::json&j){
+void serialAlgorithm(nlohmann::json&j, double*close){
     double bestReturn = 0.0;
-    int best1 = 1, best2 = 1, best3 = 1, n = 1;
+    int n = 1, curr = 1;
 
-    for (int p1 = 10; p1 <= 60; p1++)
+    for (int p1 = 10; p1 <= 60; p1++){
+        std::vector<double> rsi = calculateRSI(close, j["data"].size(), p1);
+
         for (int p2 = 10; p2 <= 60; p2++)
             for (int p3 = 5; p3 <= 30; p3++){
                 std::unordered_map<long,int> history;
 
-                double rateOfReturn = backtesting(j, history, p1, p2, p3 / 10.0);
-                //printf("%d, %d, %d, %f\n", p1, p2, p3, rateOfReturn);
+                double rateOfReturn = backtesting(j, history, rsi, p1, p2, p3 / 10.0, close);
+
+                std::cout << "process :" << curr++ << "/" << (51*51*26) << "\n";
                 if (bestReturn < rateOfReturn) {
                     bestReturn = rateOfReturn;
 
-                    best1 = p1;
-                    best2 = p2;
-                    best3 = p3;
-
-                    std::cout << rateOfReturn << "\n";
-                    makeFile(j, history, n++);
+                    // std::cout << rateOfReturn << "\n";
+                    makeFile(j, history, n++, "./out/serialTest");
                 }
 
                 history.clear();
             }
+    }
 }
 
-void parallelAlgorithm(nlohmann::json&j){
+void parallelAlgorithm(nlohmann::json&j, double*close){
     double bestReturn = 0.0;
-    int best1 = 1, best2 = 1, best3 = 1, n = 1;
+    int n = 1, curr = 1;
 
-    #pragma omp parallel for collapse(2) num_threads(numThreads)
+    #pragma omp parallel for num_threads(numThreads)
     for (int p1 = 10; p1 <= 60; p1++) {
+        std::vector<double> rsi = calculateRSI_parallel(close, j["data"].size(), p1);
+
+        #pragma omp parallel for collapse(2) num_threads(numThreads)
         for (int p2 = 10; p2 <= 60; p2++) {
             for (int p3 = 5; p3 <= 30; p3++) {
                 std::unordered_map<long,int> history;
-                double rateOfReturn = backtesting_parallel(j, history, p1, p2, p3 / 10.0);
+                double rateOfReturn = backtesting_parallel(j, history, rsi, p1, p2, p3 / 10.0, close);
 
                 #pragma omp critical
-                {
+                {   
+                    std::cout << "process :" << curr++ << "/" << (51*51*26) << "\n";
                     if (bestReturn < rateOfReturn) {
                         bestReturn = rateOfReturn;
 
-                        best1 = p1;
-                        best2 = p2;
-                        best3 = p3;
-
-                        std::cout << rateOfReturn << "\n";
-                        makeFile_parallel(j, history, n++);
+                        makeFile(j, history, n++, "./out/parallelTest");
                     }
                 }
                 history.clear();
@@ -315,20 +315,13 @@ std::vector<double> calculateBollingerBands_parallel(double*close, int n, int pe
     return BB_position_values;
 }
 
-double backtesting_parallel(nlohmann::json&j, std::unordered_map<long,int>&history, int p1, int p2, int p3) {
+double backtesting_parallel(nlohmann::json&j, std::unordered_map<long,int>&history, std::vector<double> rsi_values, int p1, int p2, int p3, double*close) {
     int maxParam = std::max(std::max(p1, p2), p3);
-
     double rateOfReturn = 0.0;
     double entryPrice = 0.0;
-
-    double* close = getClose_parallel(j);
-
-    std::vector<double> rsi_values = calculateRSI_parallel(close, j["data"].size(), p1);
     std::vector<double> bb_values = calculateBollingerBands_parallel(close, j["data"].size(), p2, p3);
 
-    #pragma omp parallel for reduction(+:rateOfReturn)
     for (size_t i = maxParam; i < j["data"].size(); i++) {
-
         double rsi = rsi_values[i - p1];
         double bb = bb_values[i - p2];
 
@@ -340,11 +333,12 @@ double backtesting_parallel(nlohmann::json&j, std::unordered_map<long,int>&histo
 
         if (buyCondition && entryPrice == 0.0) {
             entryPrice = closePrice;
-            history.insert({timestamp,1});
-        } else if (sellCondition && entryPrice != 0.0) {
+            history.insert({timestamp, 1});
+        }
+        else if (sellCondition && entryPrice != 0.0) {
             rateOfReturn += 100.0 * closePrice / entryPrice - 100.0;
             entryPrice = 0.0;
-            history.insert({timestamp,2});
+            history.insert({timestamp, 2});
         }
     }
 
@@ -355,30 +349,10 @@ double* getClose_parallel(nlohmann::json&j){
     double* close = new double[j["data"].size()];
 
     #pragma omp parallel for
-    for(int i = 0; i < j["data"].size(); ++i){
+    for(size_t i = 0; i < j["data"].size(); ++i){
         std::stringstream ssDouble((std::string)j["data"][i][4]);
         ssDouble >> close[i];
     }
 
     return close;
-}
-
-void makeFile_parallel(nlohmann::json&j, std::unordered_map<long,int>&history, int n){
-    std::ofstream myfile;
-    std::string title = "./out/parallelTest";
-
-    title.append(std::to_string(n));
-    title.append(".csv");
-    myfile.open(title);
-    myfile << "timestamp,open,high,low,close,action" << "\n";
-
-    #pragma omp parallel for ordered
-    for (int i = 0; i < j["data"].size(); ++i) {
-        std::stringstream line;
-        line << j["data"][i][0] << "," << j["data"][i][1] << "," << j["data"][i][2] << "," << j["data"][i][3] << "," << j["data"][i][4] << "," << (history.count(j["data"][i][0]) ? history.at(j["data"][i][0]) : 0) << "\n";
-
-        #pragma omp ordered
-        myfile << line.str();
-    }
-    myfile.close();
 }
