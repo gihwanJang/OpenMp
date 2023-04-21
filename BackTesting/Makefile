@@ -1,5 +1,5 @@
 CC = g++
-CFLAGS = -std=c++11 -Wall
+CFLAGS = -std=c++11 -Wall -fopenmp
 INCLUDE_PATH = -I./include
 LDFLAGS = -lcurl
 
