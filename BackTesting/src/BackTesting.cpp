@@ -12,6 +12,8 @@
 #include "timer/DS_definitions.h"
 #include "timer/DS_timer.h"
 // public
+int numThreads = 1;
+void get_numTreads(int argc, char *argv[]);
 static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdata);
 std::string send_http_request(const std::string &url);
 char *conversionTimestamp(long timestamp);
@@ -31,15 +33,16 @@ double backtesting_parallel(nlohmann::json&j, std::unordered_map<long,int>&histo
 double* getClose_parallel(nlohmann::json&j);
 void makeFile_parallel(nlohmann::json&j, std::unordered_map<long,int>&history, int n);
 
+int main(int argc, char *argv[]){
+    get_numTreads(argc, argv);
 
-int main(int argc, char const *argv[]){
     std::string url = "https://api.bithumb.com/public/candlestick/btc_krw/24h";
     std::string response = send_http_request(url);
     nlohmann::json j = nlohmann::json::parse(response);
     DS_timer timer(4, 1);
 
     timer.setTimerName(0, (char*)"Serial Algorithm");
-	timer.setTimerName(1, (char*)"Parallel Algorithm");
+   timer.setTimerName(1, (char*)"Parallel Algorithm");
 
     timer.onTimer(0);
     serialAlgorithm(j);
@@ -51,6 +54,15 @@ int main(int argc, char const *argv[]){
 
     timer.printTimer();
     return 0;
+}
+
+void get_numTreads(int argc, char *argv[]){
+    if (argc < 2) {
+      printf("It requires one arguments\n");
+      printf("Usage: Extuction_file numThreads\n");
+        exit(-1);
+    }
+    numThreads = atoi(argv[1]);
 }
 
 static size_t write_callback(char *ptr, size_t size, size_t nmemb, void *userdata){
@@ -231,7 +243,7 @@ void parallelAlgorithm(nlohmann::json&j){
     double bestReturn = 0.0;
     int best1 = 1, best2 = 1, best3 = 1, n = 1;
 
-    #pragma omp parallel for collapse(2) num_threads(4)
+    #pragma omp parallel for collapse(2) num_threads(numThreads)
     for (int p1 = 10; p1 <= 60; p1++) {
         for (int p2 = 10; p2 <= 60; p2++) {
             for (int p3 = 5; p3 <= 30; p3++) {
@@ -260,7 +272,7 @@ void parallelAlgorithm(nlohmann::json&j){
 std::vector<double> calculateRSI_parallel(double*close, int n, int period){
     std::vector<double> RSI_values(n - period + 1, 0);
 
-    #pragma omp parallel for
+    #pragma omp parallel for num_threads(numThreads)
     for (int index = 0; index <= n - period; ++index) {
         double sumGain = 0;
         double sumLoss = 0;
@@ -282,7 +294,7 @@ std::vector<double> calculateRSI_parallel(double*close, int n, int period){
 std::vector<double> calculateBollingerBands_parallel(double*close, int n, int period, int k) {
     std::vector<double> BB_position_values(n - period + 1, 0);
 
-    #pragma omp parallel for
+    #pragma omp parallel for num_threads(numThreads)
     for (int index = 0; index <= n - period; ++index) {
         double sum = 0;
         for (int i = index; i < index + period; i++)
